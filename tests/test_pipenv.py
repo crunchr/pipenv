@@ -555,8 +555,8 @@ python_dateutil = "*"
 
             c = p.pipenv('install python-dateutil')
             assert c.return_code == 0
-            assert 'python-dateutil' in p.pipfile
-            assert 'python_dateutil' not in p.pipfile
+            assert 'python-dateutil' in p.pipfile['packages']
+            assert 'python_dateutil' not in p.pipfile['packages']
 
     @pytest.mark.uninstall
     @pytest.mark.run
@@ -573,7 +573,7 @@ python_dateutil = "*"
             assert c.return_code == 0
 
             c = p.pipenv('uninstall python-dateutil')
-            assert 'python_dateutil' not in p.pipfile
+            assert 'python_dateutil' not in p.pipfile['packages']
             assert 'python-dateutil' not in p.lockfile['default']
 
     @pytest.mark.install
