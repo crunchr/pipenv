@@ -229,9 +229,9 @@ class TOMLFile:
             return any(key == '' for (key, _) in items)
 
         if has_anonymous_entry():
-            return items
+            return list(items)
         else:
-            return items + [('', self[''])]
+            return list(items) + [('', self[''])]
 
     @property
     def primitive(self):
