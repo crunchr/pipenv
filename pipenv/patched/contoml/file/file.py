@@ -229,9 +229,9 @@ class TOMLFile:
             return any(key == '' for (key, _) in items)
 
         if has_anonymous_entry():
-            return list(items)
+            return items
         else:
-            return list(items) + [('', self[''])]
+            return items + [('', self[''])]
 
     @property
     def primitive(self):
@@ -270,18 +270,6 @@ class TOMLFile:
     @property
     def elements(self):
         return self._elements
-
-    _marker = object()
-
-    def pop(self, item, default=_marker):
-        """Pops an item and return the value"""
-        if item in self:
-            rv = self[item]
-            del self[item]
-            return rv
-        if default is self._marker:
-            raise KeyError(item)
-        return default
 
     def __str__(self):
 
