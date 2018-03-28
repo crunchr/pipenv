@@ -26,6 +26,7 @@ Pipenv is a tool that aims to bring the best of all packaging worlds (bundler, c
 
 It automatically creates and manages a virtualenv for your projects, as well as adds/removes packages from your ``Pipfile`` as you install/uninstall packages. It also generates the ever-important ``Pipfile.lock``, which is used to produce deterministic builds.
 
+Pipenv is primarily meant to provide users and developers of applications with an easy method to setup a working environment. For the distinction between libraries and applications and the usage of ``setup.py`` vs ``Pipfile`` to define dependencies, see :ref:`pipfile-vs-setuppy`.
 
 .. raw:: html
 
@@ -44,23 +45,22 @@ The problems that Pipenv seeks to solve are multi-faceted:
 Install Pipenv Today!
 ---------------------
 
+If you're on MacOS, use can install Pipenv easily with Homebrew::
 
-.. note:: The use of **Python 3** is *highly* preferred over Python 2, when installing Pipenv. Compatibility with three virtualenvs is greatly improved when using Python 3 as the installation target.
+    $ brew install pipenv
 
-  —*Kenneth Reitz*
+Or, if you're using Ubuntu 17.10::
 
-Pipenv is a python package and so can be installed using ``pip`` as you would expect.
-::
+    $ sudo apt install software-properties-common python-software-properties
+    $ sudo add-apt-repository ppa:pypa/ppa
+    $ sudo apt update
+    $ sudo apt install pipenv
+
+Otherwise, just use pip::
 
     $ pip install pipenv
-    ✨🍰✨
 
-If you have excellent taste, there are various other installation methods which
-prevent pipenv and its dependencies from interfering with the rest of your
-Python installation. These include
-`Pipsi <https://docs.pipenv.org/install/#fancy-installation-of-pipenv>`_,
-`Nix <https://docs.pipenv.org/install/#referentially-transparent-installation-of-pipenv>`_
-and `Homebrew <https://docs.pipenv.org/install/#homebrew-installation-of-pipenv>`_.
+✨🍰✨
 
 .. toctree::
    :maxdepth: 2
@@ -73,11 +73,11 @@ User Testimonials
 **Jannis Leidel**, former pip maintainer—
     *Pipenv is the porcelain I always wanted to build for pip. It fits my brain and mostly replaces virtualenvwrapper and manual pip calls for me. Use it.*
 
+**David Gang**—
+    *This package manager is really awesome. For the first time I know exactly what my dependencies are which I installed and what the transitive dependencies are. Combined with the fact that installs are deterministic, makes this package manager first class, like cargo*.
+
 **Justin Myles Holmes**—
     *Pipenv is finally an abstraction meant to engage the mind instead of merely the filesystem.*
-
-**Isaac Sanders**—
-    *Pipenv is literally the best thing about my day today. Thanks, Kenneth!*
 
 ☤ Pipenv Features
 -----------------
@@ -121,6 +121,7 @@ Further Documentation Guides
 
    basics
    advanced
+   diagnose
 
 ☤ Pipenv Usage
 --------------

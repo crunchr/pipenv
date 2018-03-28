@@ -1,5 +1,6 @@
 [dev-packages]
 
+pipenv = {path = ".", editable = true}
 "flake8" = ">=3.3.0,<4"
 pytest = "*"
 mock = "*"
@@ -8,13 +9,18 @@ twine = "*"
 sphinx-click = "*"
 pytest-xdist = "*"
 click = "*"
-
+pytest-pypy = {path = "./tests/pytest-pypi", editable = true}
+pytest-tap = "*"
+stdeb = {version="*", sys_platform="== 'linux'"}
+white = {version="*", markers="python_version >= '3.6'"}
 
 [packages]
-
-"e1839a8" = {path = ".", editable = true}
 
 
 [scripts]
 
-tests = "pytest tests"
+tests = "bash ./run-tests.sh"
+
+[pipenv]
+
+allow_prereleases = true

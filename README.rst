@@ -10,12 +10,6 @@ Pipenv: Python Development Workflow for Humans
 .. image:: https://img.shields.io/pypi/pyversions/pipenv.svg
     :target: https://pypi.python.org/pypi/pipenv
 
-.. image:: https://travis-ci.org/pypa/pipenv.svg?branch=master
-    :target: https://travis-ci.org/pypa/pipenv
-
-.. image:: https://img.shields.io/appveyor/ci/kennethreitz/pipenv.svg
-    :target: https://ci.appveyor.com/project/kennethreitz/pipenv/branch/master
-
 .. image:: https://img.shields.io/badge/Say%20Thanks-!-1EAEDB.svg
     :target: https://saythanks.io/to/kennethreitz
 
@@ -40,17 +34,22 @@ The problems that Pipenv seeks to solve are multi-faceted:
 Installation
 ------------
 
-::
+If you're on MacOS, you can install Pipenv easily with Homebrew::
+
+    $ brew install pipenv
+
+Or, if you're using Ubuntu 17.10::
+
+    $ sudo apt install software-properties-common python-software-properties
+    $ sudo add-apt-repository ppa:pypa/ppa
+    $ sudo apt update
+    $ sudo apt install pipenv
+
+Otherwise, just use pip::
 
     $ pip install pipenv
 
 ✨🍰✨
-
-There are also various other installation methods which prevent pipenv from
-interfering with the rest of your Python installation. These include
-`Pipsi <https://docs.pipenv.org/install/#fancy-installation-of-pipenv>`_,
-`Nix <https://docs.pipenv.org/install/#referentially-transparent-installation-of-pipenv>`_
-and `Homebrew <https://docs.pipenv.org/install/#homebrew-installation-of-pipenv>`_.
 
 
 ☤ User Testimonials
@@ -59,12 +58,11 @@ and `Homebrew <https://docs.pipenv.org/install/#homebrew-installation-of-pipenv>
 **Jannis Leidel**, former pip maintainer—
     *Pipenv is the porcelain I always wanted to build for pip. It fits my brain and mostly replaces virtualenvwrapper and manual pip calls for me. Use it.*
 
+**David Gang**—
+    *This package manager is really awesome. For the first time I know exactly what my dependencies are which I installed and what the transitive dependencies are. Combined with the fact that installs are deterministic, makes this package manager first class, like cargo*.
+
 **Justin Myles Holmes**—
     *Pipenv is finally an abstraction meant to engage the mind instead of merely the filesystem.*
-
-**Isaac Sanders**—
-    *Pipenv is literally the best thing about my day today. Thanks, Kenneth!*
-
 
 
 ☤ Features
@@ -122,7 +120,6 @@ Fish is the best shell. You should use it.
     Usage: pipenv [OPTIONS] COMMAND [ARGS]...
 
     Options:
-      --update         Update Pipenv & pip to latest.
       --where          Output project home information.
       --venv           Output virtualenv information.
       --py             Output Python interpreter information.

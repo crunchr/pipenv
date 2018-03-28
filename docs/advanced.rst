@@ -7,6 +7,13 @@ Advanced Usage of Pipenv
 
 This document covers some of Pipenv's more glorious and advanced features.
 
+☤ Caveats
+---------
+
+- Dependencies of wheels provided in a ``Pipfile`` will not be captured by ``$ pipenv lock``.
+- There are some known issues with using private indexes, related to hashing. We're actively working to solve this problem. You may have great luck with this, however.
+- Installation is intended to be as deterministic as possible — use the ``--sequential`` flag to increase this, if experiencing issues.
+
 ☤ Specifying Package Indexes
 ----------------------------
 
@@ -31,6 +38,23 @@ If you'd like a specific package to be installed with a specific package index, 
 
 Very fancy.
 
+☤ Injecting credentials into Pipfiles via environment variables
+-----------------------------------------------------------------
+
+
+Pipenv will expand environment variables (if defined) in your Pipfile. Quite
+useful if you need to authenticate to a private PyPI::
+
+    [[source]]
+    url = "https://$USERNAME:${PASSWORD}@mypypi.example.com/simple"
+    verify_ssl = true
+    name = "pypi"
+
+Luckily - pipenv will hash your Pipfile *before* expanding environment
+variables (and, helpfully, will substitute the environment variables again when
+you install from the lock file - so no need to commit any secrets! Woo!)
+
+
 ☤ Specifying Basically Anything
 -------------------------------
 
@@ -46,7 +70,7 @@ Here's an example ``Pipfile``, which will only install ``pywinusb`` on Windows s
 
     [packages]
     requests = "*"
-    pywinusb = {version = "*", os_name = "== 'windows'"}
+    pywinusb = {version = "*", sys_platform = "== 'win32'"}
 
 Voilà!
 
@@ -85,10 +109,14 @@ To use Pipenv with a Conda–provided Python, you simply provide the path to the
 
     $ pipenv install --python=/path/to/anaconda/python
 
+To reuse Conda–installed Python packages, use the ``--site-packages`` flag::
+
+    $ pipenv --python=/path/to/anaconda/python --site-packages
+
 ☤ Generating a ``requirements.txt``
 -----------------------------------
 
-You can convert a ``Pipfile`` and ``Pipfile.lock`` into a ``requirements.txt`` file very easily, and get all the benefits of hashes, extras, and other goodies we have included.
+You can convert a ``Pipfile`` and ``Pipfile.lock`` into a ``requirements.txt`` file very easily, and get all the benefits of extras and other goodies we have included.
 
 Let's take this ``Pipfile``::
 
@@ -102,11 +130,11 @@ Let's take this ``Pipfile``::
 And generate a ``requirements.txt`` out of it::
 
     $ pipenv lock -r
-    chardet==3.0.4 --hash=sha256:fc323ffcaeaed0e0a02bf4d117757b98aed530d9ed4531e3e15460124c106691  --hash=sha256:84ab92ed1c4d4f16916e05906b6b75a6c0fb5db821cc65e70cbd64a3e2a5eaae
-    requests==2.18.4 --hash=sha256:6a1b267aa90cac58ac3a765d067950e7dbbf75b1da07e895d1f594193a40a38b  --hash=sha256:9c443e7324ba5b85070c4a818ade28bfabedf16ea10206da1132edaa6dda237e
-    certifi==2017.7.27.1 --hash=sha256:54a07c09c586b0e4c619f02a5e94e36619da8e2b053e20f594348c0611803704  --hash=sha256:40523d2efb60523e113b44602298f0960e900388cf3bb6043f645cf57ea9e3f5
-    idna==2.6 --hash=sha256:8c7309c718f94b3a625cb648ace320157ad16ff131ae0af362c9f21b80ef6ec4  --hash=sha256:2c6a5de3089009e3da7c5dde64a141dbc8551d5b7f6cf4ed7c2568d0cc520a8f
-    urllib3==1.22 --hash=sha256:06330f386d6e4b195fbfc736b297f58c5a892e4440e54d294d7004e3a9bbea1b  --hash=sha256:cc44da8e1145637334317feebd728bd869a35285b93cbb4cca2577da7e62db4f
+    chardet==3.0.4
+    requests==2.18.4
+    certifi==2017.7.27.1
+    idna==2.6
+    urllib3==1.22
 
 If you wish to generate a ``requirements.txt`` with only the development requirements you can do that too!  Let's take the following ``Pipfile``::
 
@@ -119,9 +147,9 @@ If you wish to generate a ``requirements.txt`` with only the development require
 
 And generate a ``requirements.txt`` out of it::
 
-    $ pipenv lock -r -d
-    py==1.4.34 --hash=sha256:2ccb79b01769d99115aa600d7eed99f524bf752bba8f041dc1c184853514655a  --hash=sha256:0f2d585d22050e90c7d293b6451c83db097df77871974d90efd5a30dc12fcde3
-    pytest==3.2.3 --hash=sha256:81a25f36a97da3313e1125fce9e7bbbba565bc7fec3c5beb14c262ddab238ac1  --hash=sha256:27fa6617efc2869d3e969a3e75ec060375bfb28831ade8b5cdd68da3a741dc3c
+    $ pipenv lock -r --dev
+    py==1.4.34
+    pytest==3.2.3
 
 Very fancy.
 
@@ -174,6 +202,37 @@ Example::
 
 ✨🍰✨
 
+.. note::
+
+   In order to enable this functionality while maintaining its permissive
+   copyright license, `pipenv` embeds an API client key for the backend
+   Safety API operated by pyup.io rather than including a full copy of the
+   CC-BY-NC-SA licensed Safety-DB database. This embedded client key is
+   shared across all `pipenv check` users, and hence will be subject to
+   API access throttling based on overall usage rather than individual
+   client usage.
+
+
+☤ Community Integrations
+------------------------
+
+There are a range of community-maintained plugins and extensions available for a range of editors and IDEs, as well as
+different products which integrate with Pipenv projects:
+
+- `Heroku <https://heroku.com/python>`_ (Cloud Hosting)
+- `Platform.sh <https://platform.sh/hosting/python>`_ (Cloud Hosting)
+- `PyUp <https://pyup.io>`_ (Security Notification)
+- `Emacs <https://github.com/pwalsh/pipenv.el>`_ (Editor Integration)
+- `Fish Shell <https://github.com/fisherman/pipenv>`_ (Automatic ``$ pipenv shell``!)
+- `VS Code <https://code.visualstudio.com/docs/python/environments>`_ (Editor Integration)
+
+Works in progress:
+
+- `Sublime Text <https://github.com/kennethreitz/pipenv-sublime>`_ (Editor Integration)
+- `PyCharm <https://www.jetbrains.com/pycharm/download/>`_ (Editor Integration)
+- Mysterious upcoming Google Cloud product (Cloud Hosting)
+
+
 
 ☤ Open a Module in Your Editor
 ------------------------------
@@ -190,7 +249,7 @@ Pipenv allows you to open any Python module that is installed (including ones in
 
 This allows you to easily read the code you're consuming, instead of looking it up on GitHub.
 
-.. note:: The standard ``EDITOR`` environment variable is used for this. If you're using Sublime Text, for example, you'll want to ``export EDITOR=subl`` (once you've installed the command-line utility).
+.. note:: The standard ``EDITOR`` environment variable is used for this. If you're using VS Code, for example, you'll want to ``export EDITOR=code`` (if you're on macOS you will want to `install the command <https://code.visualstudio.com/docs/setup/mac#_launching-from-the-command-line>`_ on to your ``PATH`` first).
 
 ☤ Automatic Python Installation
 -------------------------------
@@ -259,6 +318,27 @@ If your ``.env`` file is located in a different path or has a different name you
 To prevent pipenv from loading the ``.env`` file, set the ``PIPENV_DONT_LOAD_ENV`` environment variable::
 
     $ PIPENV_DONT_LOAD_ENV=1 pipenv shell
+
+☤ Support for Environment Variables
+-----------------------------------
+
+``pipenv`` supports the usage of environment variables in values. For example:
+
+    [[source]]
+    url = "https://${PYPI_USERNAME}:${PYPI_PASSWORD}@my_private_repo.example.com/simple"
+    verify_ssl = true
+    name = "pypi"
+
+    [dev-packages]
+
+    [packages]
+    requests = {version="*", index="home"}
+    maya = {version="*", index="pypi"}
+    records = "*"
+
+Environment variables may be specified as ``${MY_ENVAR}`` or ``$MY_ENVAR``.
+On Windows, ``%MY_ENVAR%`` is supported in addition to ``${MY_ENVAR}`` or ``$MY_ENVAR``.
+
 
 ☤ Configuration With Environment Variables
 ------------------------------------------
@@ -362,14 +442,12 @@ and external testing::
     envlist = flake8-py3, py26, py27, py33, py34, py35, py36, pypy
 
     [testenv]
-    passenv=HOME
     deps = pipenv
     commands=
         pipenv install --dev
         pipenv run py.test tests
 
     [testenv:flake8-py3]
-    passenv=HOME
     basepython = python3.4
     commands=
         {[testenv]deps}
@@ -377,8 +455,19 @@ and external testing::
         pipenv run flake8 --version
         pipenv run flake8 setup.py docs project test
 
-.. note:: With Pipenv's default configuration, you'll need to use tox's ``passenv`` parameter
-          to pass your shell's ``HOME`` variable.
+``pipenv`` will automatically use the virtualenv provided by ``tox``.
+
+You might also want to add ``--ignore-pipfile`` to ``pipenv install``, as to
+not accidentally modify the lock-file on each test run. This causes ``pipenv``
+to ignore changes to the ``Pipfile`` and (more importantly) prevents it from
+adding the current environment to ``Pipfile.lock``. This might be important as
+the current environment (i.e. the virtualenv provisioned by tox) will usually
+contain the current project (which may or may not be desired) and additional
+dependencies from ``tox``'s ``deps`` directive. The initial provisioning may
+alternatively be disabled by adding ``skip_install = True`` to tox.ini.
+
+This method requires you to be explicit about updating the lock-file, which is
+probably a good idea in any case.
 
 A 3rd party plugin, `tox-pipenv`_ is also available to use Pipenv natively with tox.
 
@@ -393,6 +482,10 @@ A 3rd party plugin, `tox-pipenv`_ is also available to use Pipenv natively with 
 To enable completion in fish, add this to your config::
 
     eval (pipenv --completion)
+
+Alternatively, with bash or zsh, add this to your config::
+
+    eval "$(pipenv --completion)"
 
 Magic shell completions are now enabled!
 
@@ -415,3 +508,28 @@ interfaces that don't participate in Python-level dependency resolution
 at all, use the `PIP_IGNORE_INSTALLED` setting::
 
     $ PIP_IGNORE_INSTALLED=1 pipenv install --dev
+
+
+.. _pipfile-vs-setuppy:
+
+☤ Pipfile vs setup.py
+---------------------
+
+There is a subtle but very important distinction to be made between **applications** and **libraries**. This is a very common source of confusion in the Python community.
+
+Libraries provide reusable functionality to other libraries and applications (let's use the umbrella term **projects** here). They are required to work alongside other libraries, all with their own set of subdependencies. They define **abstract dependencies**. To avoid version conflicts in subdependencies of different libraries within a project, libraries should never ever pin dependency versions. Although they may specify lower or (less frequently) upper bounds, if they rely on some specific feature/fix/bug. Library dependencies are specified via ``install_requires`` in ``setup.py``.
+
+Libraries are ultimately meant to be used in some **application**. Applications are different in that they usually are not depended on by other projects. They are meant to be deployed into some specific environment and only then should the exact versions of all their dependencies and subdependencies be made concrete. To make this process easier is currently the main goal of ``pipenv``.
+
+To summarize:
+
+- For libraries, define **abstract dependencies** via ``install_requires`` in ``setup.py``. The decision of which version exactly to be installed and where to obtain that dependency is not yours to make!
+- For applications, define **dependencies and where to get them** in the `Pipfile` and use this file to update the set of **concrete dependencies** in ``Pipfile.lock``. This file defines a specific idempotent environment that is known to work for your project. The ``Pipfile.lock`` is your source of truth. The ``Pipfile`` is a convenience for you to create that lock-file, in that it allows you to still remain somewhat vague about the exact version of a dependency to be used. ``pipenv`` is there to help you define a working conflict-free set of specific dependency-versions, which would otherwise be a very tedious task.
+- Of course, ``Pipfile`` and ``pipenv`` are still useful for library developers, as they can be used to define a development or test environment.
+- And, of course, there are projects for which the distinction between library and application isn't that clear. In that case, use ``install_requires`` alongside ``pipenv`` and ``Pipfile``.
+
+You can also do this::
+
+    $ pipenv install -e .
+
+This will tell Pipenv to lock all your ``setup.py``–declared dependencies.

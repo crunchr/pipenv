@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
+import codecs
 import json
 import os
 import re
+import six
 import sys
 import shlex
 import base64
@@ -12,30 +14,47 @@ import delegator
 import pipfile
 import toml
 
-from .patched.pip.baseparser import ConfigOptionParser
+from pip9 import ConfigOptionParser
 from .utils import (
-    mkdir_p, convert_deps_from_pip, pep423_name, recase_file,
-    find_requirements, is_file, is_vcs, python_version, cleanup_toml,
-    is_installable_file, is_valid_url, normalize_drive
+    mkdir_p,
+    convert_deps_from_pip,
+    pep423_name,
+    recase_file,
+    find_requirements,
+    is_editable,
+    is_file,
+    is_vcs,
+    cleanup_toml,
+    is_installable_file,
+    is_valid_url,
+    normalize_drive,
+    python_version,
+    escape_grouped_arguments,
 )
 from .environments import (
     PIPENV_MAX_DEPTH,
     PIPENV_PIPFILE,
     PIPENV_VENV_IN_PROJECT,
     PIPENV_VIRTUALENV,
+    PIPENV_TEST_INDEX,
+    PIPENV_PYTHON,
 )
 
 if PIPENV_PIPFILE:
     if not os.path.isfile(PIPENV_PIPFILE):
         raise RuntimeError('Given PIPENV_PIPFILE is not found!')
+
     else:
         PIPENV_PIPFILE = normalize_drive(os.path.abspath(PIPENV_PIPFILE))
+# (path, file contents) => TOMLFile
+# keeps track of pipfiles that we've seen so we do not need to re-parse 'em
+_pipfile_cache = {}
 
 
 class Project(object):
     """docstring for Project"""
 
-    def __init__(self, chdir=True):
+    def __init__(self, which=None, python_version=None, chdir=True):
         super(Project, self).__init__()
         self._name = None
         self._virtualenv_location = None
@@ -44,7 +63,8 @@ class Project(object):
         self._pipfile_location = None
         self._requirements_location = None
         self._original_dir = os.path.abspath(os.curdir)
-
+        self.which = which
+        self.python_version = python_version
         # Hack to skip this during pipenv run, or -r.
         if ('run' not in sys.argv) and chdir:
             try:
@@ -69,13 +89,25 @@ class Project(object):
                 # When a vcs url is gven without editable it only appears as a key
                 # Eliminate any vcs, path, or url entries which are not editable
                 # Since pip-tools can't do deep resolution on them, even setuptools-installable ones
-                if (is_vcs(v) or is_vcs(k) or (is_installable_file(k) or is_installable_file(v)) or
-                        any((prefix in v and
-                             (os.path.isfile(v[prefix]) or is_valid_url(v[prefix])))
-                            for prefix in ['path', 'file'])):
+                if (
+                    is_vcs(v) or
+                    is_vcs(k) or
+                    (is_installable_file(k) or is_installable_file(v)) or
+                    any(
+                        (
+                            prefix in v and
+                            (
+                                os.path.isfile(v[prefix]) or
+                                is_valid_url(v[prefix])
+                            )
+                        )
+                        for prefix in ['path', 'file']
+                    )
+                ):
                     # If they are editable, do resolve them
                     if 'editable' not in v:
                         continue
+
                     else:
                         ps.update({k: v})
                 else:
@@ -84,13 +116,15 @@ class Project(object):
                 # Since these entries have no attributes we know they are not editable
                 # So we can safely exclude things that need to be editable in order to be resolved
                 # First exclude anything that is a vcs entry either in the key or value
-                if not (any(is_vcs(i) for i in [k, v]) or
-                        # Then exclude any installable files that are not directories
-                        # Because pip-tools can resolve setup.py for example
-                        any(is_installable_file(i) for i in [k, v]) or
-                        # Then exclude any URLs because they need to be editable also
-                        # Things that are excluded can only be 'shallow resolved'
-                        any(is_valid_url(i) for i in [k, v])):
+                if not (
+                    any(is_vcs(i) for i in [k, v]) or
+                    # Then exclude any installable files that are not directories
+                    # Because pip-tools can resolve setup.py for example
+                    any(is_installable_file(i) for i in [k, v]) or
+                    # Then exclude any URLs because they need to be editable also
+                    # Things that are excluded can only be 'shallow resolved'
+                    any(is_valid_url(i) for i in [k, v])
+                ):
                     ps.update({k: v})
         return ps
 
@@ -107,16 +141,23 @@ class Project(object):
     @property
     def required_python_version(self):
         if self.pipfile_exists:
-            required = self.parsed_pipfile.get('requires', {}).get('python_full_version')
+            required = self.parsed_pipfile.get('requires', {}).get(
+                'python_full_version'
+            )
             if not required:
-                required = self.parsed_pipfile.get('requires', {}).get('python_version')
+                required = self.parsed_pipfile.get('requires', {}).get(
+                    'python_version'
+                )
             if required != "*":
                 return required
 
     @property
     def project_directory(self):
         if self.pipfile_location is not None:
-            return os.path.abspath(os.path.join(self.pipfile_location, os.pardir))
+            return os.path.abspath(
+                os.path.join(self.pipfile_location, os.pardir)
+            )
+
         else:
             return None
 
@@ -132,7 +173,9 @@ class Project(object):
                 extra = ['Scripts', 'activate.bat']
             else:
                 extra = ['bin', 'activate']
-            return os.path.isfile(os.sep.join([self.virtualenv_location] + extra))
+            return os.path.isfile(
+                os.sep.join([self.virtualenv_location] + extra)
+            )
 
         return False
 
@@ -151,18 +194,19 @@ class Project(object):
         #   http://www.tldp.org/LDP/abs/html/special-chars.html#FIELDREF
         #   https://github.com/torvalds/linux/blob/2bfe01ef/include/uapi/linux/binfmts.h#L18
         sanitized = re.sub(r'[ $`!*@"\\\r\n\t]', '_', self.name)[0:42]
-
         # Hash the full path of the pipfile
         hash = hashlib.sha256(self.pipfile_location.encode()).digest()[:6]
         encoded_hash = base64.urlsafe_b64encode(hash).decode()
-
         # If the pipfile was located at '/home/user/MY_PROJECT/Pipfile',
         # the name of its virtualenv will be 'my-project-wyUfYPqE'
-        return sanitized + '-' + encoded_hash
+        if PIPENV_PYTHON:
+            return sanitized + '-' + encoded_hash + '-' + PIPENV_PYTHON
+
+        else:
+            return sanitized + '-' + encoded_hash
 
     @property
     def virtualenv_location(self):
-
         # if VIRTUAL_ENV is set, use that.
         if PIPENV_VIRTUALENV:
             return PIPENV_VIRTUALENV
@@ -170,15 +214,23 @@ class Project(object):
         # Use cached version, if available.
         if self._virtualenv_location:
             return self._virtualenv_location
+        venv_in_project = PIPENV_VENV_IN_PROJECT or \
+            os.path.exists(os.path.join(self.project_directory, '.venv'))
 
-        # The user wants the virtualenv in the project.
-        if not PIPENV_VENV_IN_PROJECT:
-            c = delegator.run('pew dir "{0}"'.format(self.virtualenv_name))
-            loc = c.out.strip()
         # Default mode.
+        if not venv_in_project:
+            c = delegator.run(
+                '{0} -m pipenv.pew dir "{1}"'.format(
+                    escape_grouped_arguments(sys.executable),
+                    self.virtualenv_name,
+                )
+            )
+            loc = c.out.strip()
+        # The user wants the virtualenv in the project.
         else:
-            loc = os.sep.join(self.pipfile_location.split(os.sep)[:-1] + ['.venv'])
-
+            loc = os.sep.join(
+                self.pipfile_location.split(os.sep)[:-1] + ['.venv']
+            )
         self._virtualenv_location = loc
         return loc
 
@@ -193,21 +245,19 @@ class Project(object):
         if self._download_location is None:
             loc = os.sep.join([self.virtualenv_location, 'downloads'])
             self._download_location = loc
-
         # Create the directory, if it doesn't exist.
         mkdir_p(self._download_location)
-
         return self._download_location
 
     @property
     def proper_names_location(self):
         if self._proper_names_location is None:
-            loc = os.sep.join([self.virtualenv_location, 'pipenv-proper-names.txt'])
+            loc = os.sep.join(
+                [self.virtualenv_location, 'pipenv-proper-names.txt']
+            )
             self._proper_names_location = loc
-
         # Create the database, if it doesn't exist.
         open(self._proper_names_location, 'a').close()
-
         return self._proper_names_location
 
     @property
@@ -231,7 +281,6 @@ class Project(object):
             except RuntimeError:
                 loc = None
             self._pipfile_location = normalize_drive(loc)
-
         return self._pipfile_location
 
     @property
@@ -242,33 +291,52 @@ class Project(object):
             except RuntimeError:
                 loc = None
             self._requirements_location = loc
-
         return self._requirements_location
 
     @property
     def parsed_pipfile(self):
+        """Parse Pipfile into a TOMLFile and cache it
+
+        (call clear_pipfile_cache() afterwards if mutating)"""
         # Open the pipfile, read it into memory.
         with open(self.pipfile_location) as f:
             contents = f.read()
+        # use full contents to get around str/bytes 2/3 issues
+        cache_key = (self.pipfile_location, contents)
+        if cache_key not in _pipfile_cache:
+            parsed = self._parse_pipfile(contents)
+            _pipfile_cache[cache_key] = parsed
+        return _pipfile_cache[cache_key]
 
+    @property
+    def pased_pure_pipfile(self):
+        with open(self.pipfile_location) as f:
+            contents = f.read()
+
+        return self._parse_pipfile(contents)
+
+    def clear_pipfile_cache(self):
+        """Clear pipfile cache (e.g., so we can mutate parsed pipfile)"""
+        _pipfile_cache.clear()
+
+    def _parse_pipfile(self, contents):
         # If any outline tables are present...
         if ('[packages.' in contents) or ('[dev-packages.' in contents):
-
             data = toml.loads(contents)
-
             # Convert all outline tables to inline tables.
             for section in ('packages', 'dev-packages'):
                 for package in data.get(section, {}):
-
                     # Convert things to inline tables — fancy :)
                     if hasattr(data[section][package], 'keys'):
                         _data = data[section][package]
-                        data[section][package] = toml._get_empty_inline_table(dict)
+                        data[section][package] = toml._get_empty_inline_table(
+                            dict
+                        )
                         data[section][package].update(_data)
-
             # We lose comments here, but it's for the best.)
             try:
                 return contoml.loads(toml.dumps(data, preserve=True))
+
             except RuntimeError:
                 return toml.loads(toml.dumps(data, preserve=True))
 
@@ -276,6 +344,7 @@ class Project(object):
             # Fallback to toml parser, for large files.
             try:
                 return contoml.loads(contents)
+
             except Exception:
                 return toml.loads(contents)
 
@@ -283,14 +352,14 @@ class Project(object):
     def _pipfile(self):
         """Pipfile divided by PyPI and external dependencies."""
         pfile = self.parsed_pipfile
+        # mutation time!
+        self.clear_pipfile_cache()
         for section in ('packages', 'dev-packages'):
             p_section = pfile.get(section, {})
-
             for key in list(p_section.keys()):
                 # Normalize key name to PEP 423.
                 norm_key = pep423_name(key)
                 p_section[norm_key] = p_section.pop(key)
-
         return pfile
 
     @property
@@ -301,41 +370,36 @@ class Project(object):
     @property
     def scripts(self):
         scripts = self.parsed_pipfile.get('scripts', {})
+        posix = os.name == 'posix'
+        _scripts = {}
         for (k, v) in scripts.items():
-            scripts[k] = shlex.split(v, posix=True)
-
-        return scripts
-
+            _scripts[k] = shlex.split(str(v), posix=posix)
+        return _scripts
 
     def update_settings(self, d):
         settings = self.settings
-
         changed = False
         for new in d:
             if new not in settings:
                 settings[new] = d[new]
                 changed = True
-
         if changed:
             p = self.parsed_pipfile
             p['pipenv'] = settings
-
             # Write the changes to disk.
             self.write_toml(p)
+            self.clear_pipfile_cache()
 
     @property
     def _lockfile(self):
         """Pipfile.lock divided by PyPI and external dependencies."""
-        pfile = pipfile.load(self.pipfile_location)
+        pfile = pipfile.load(self.pipfile_location, inject_env=False)
         lockfile = json.loads(pfile.lock())
-
         for section in ('default', 'develop'):
             lock_section = lockfile.get(section, {})
-
             for key in list(lock_section.keys()):
                 norm_key = pep423_name(key)
                 lockfile[section][norm_key] = lock_section.pop(key)
-
         return lockfile
 
     @property
@@ -349,7 +413,31 @@ class Project(object):
     @property
     def lockfile_content(self):
         with open(self.lockfile_location) as lock:
-            return json.load(lock)
+            j = json.load(lock)
+
+        # Expand environment variables in Pipfile.lock at runtime.
+        for i, source in enumerate(j['_meta']['sources'][:]):
+            j['_meta']['sources'][i]['url'] = os.path.expandvars(j['_meta']['sources'][i]['url'])
+
+        return j
+
+    @property
+    def editable_packages(self):
+        packages = {
+            k: v
+            for k, v in self.parsed_pipfile.get('packages', {}).items()
+            if is_editable(v)
+        }
+        return packages
+
+    @property
+    def editable_dev_packages(self):
+        packages = {
+            k: v
+            for k, v in self.parsed_pipfile.get('dev-packages', {}).items()
+            if is_editable(v)
+        }
+        return packages
 
     @property
     def vcs_packages(self):
@@ -407,53 +495,67 @@ class Project(object):
         config_parser = ConfigOptionParser(name=self.name)
         install = dict(config_parser.get_config_section('install'))
         indexes = install.get('extra-index-url', '').lstrip('\n').split('\n')
+        if PIPENV_TEST_INDEX:
+            sources = [
+                {
+                    u'url': PIPENV_TEST_INDEX,
+                    u'verify_ssl': True,
+                    u'name': u'custom',
+                }
+            ]
+        else:
+            # Default source.
+            pypi_source = {
+                u'url': u'https://pypi.python.org/simple',
+                u'verify_ssl': True,
+                u'name': 'pypi',
+            }
+            sources = [pypi_source]
+            for i, index in enumerate(indexes):
+                if not index:
+                    continue
 
-        # Default source.
-        pypi_source = {u'url': u'https://pypi.python.org/simple', u'verify_ssl': True, u'name': 'pypi'}
-        sources = [pypi_source]
-
-        for i, index in enumerate(indexes):
-            if not index:
-                continue
-            source_name = 'pip_index_{}'.format(i)
-            verify_ssl = index.startswith('https')
-
-            sources.append({u'url': index, u'verify_ssl': verify_ssl, u'name': source_name})
-
+                source_name = 'pip_index_{}'.format(i)
+                verify_ssl = index.startswith('https')
+                sources.append(
+                    {
+                        u'url': index,
+                        u'verify_ssl': verify_ssl,
+                        u'name': source_name,
+                    }
+                )
         data = {
             u'source': sources,
-
             # Default packages.
             u'packages': {},
             u'dev-packages': {},
-
         }
-
         # Default requires.
-        if python:
-            data[u'requires'] = {'python_version': python_version(python)[:len('2.7')]}
-
+        required_python = python or self.which(
+            'python', self.virtualenv_location
+        )
+        data[u'requires'] = {
+            'python_version': python_version(required_python)[: len('2.7')]
+        }
         self.write_toml(data, 'Pipfile')
 
     def write_toml(self, data, path=None):
         """Writes the given data structure out as TOML."""
         if path is None:
             path = self.pipfile_location
-
         try:
             formatted_data = contoml.dumps(data).rstrip()
         except Exception:
             for section in ('packages', 'dev-packages'):
                 for package in data[section]:
-
                     # Convert things to inline tables — fancy :)
                     if hasattr(data[section][package], 'keys'):
                         _data = data[section][package]
-                        data[section][package] = toml._get_empty_inline_table(dict)
+                        data[section][package] = toml._get_empty_inline_table(
+                            dict
+                        )
                         data[section][package].update(_data)
-
             formatted_data = toml.dumps(data).rstrip()
-
         formatted_data = cleanup_toml(formatted_data)
         with open(path, 'w') as f:
             f.write(formatted_data)
@@ -465,16 +567,25 @@ class Project(object):
             sources_ = meta_.get('sources')
             if sources_:
                 return sources_
+
         if 'source' in self.parsed_pipfile:
             return self.parsed_pipfile['source']
+
         else:
-            return [{u'url': u'https://pypi.python.org/simple', u'verify_ssl': True, 'name': 'pypi'}]
+            return [
+                {
+                    u'url': u'https://pypi.python.org/simple',
+                    u'verify_ssl': True,
+                    'name': 'pypi',
+                }
+            ]
 
     def get_source(self, name=None, url=None):
         for source in self.sources:
             if name:
                 if source.get('name') == name:
                     return source
+
             elif url:
                 if source.get('url') in url:
                     return source
@@ -483,68 +594,66 @@ class Project(object):
         """Deletes the lockfile."""
         try:
             return os.remove(self.lockfile_location)
+
         except OSError:
             pass
 
     def remove_package_from_pipfile(self, package_name, dev=False):
-
         # Read and append Pipfile.
         p = self._pipfile
-
         package_name = pep423_name(package_name)
-
         key = 'dev-packages' if dev else 'packages'
-
         if key in p and package_name in p[key]:
             del p[key][package_name]
-
         # Write Pipfile.
         self.write_toml(recase_file(p))
 
     def add_package_to_pipfile(self, package_name, dev=False):
-
         # Read and append Pipfile.
         p = self._pipfile
-
         # Don't re-capitalize file URLs or VCSs.
         converted = convert_deps_from_pip(package_name)
         converted = converted[[k for k in converted.keys()][0]]
-
-        if not (is_file(package_name) or is_vcs(converted) or 'path' in converted):
+        if not (
+            is_file(package_name) or is_vcs(converted) or 'path' in converted
+        ):
             package_name = pep423_name(package_name)
-
         key = 'dev-packages' if dev else 'packages'
-
         # Set empty group if it doesn't exist yet.
         if key not in p:
             p[key] = {}
-
         package = convert_deps_from_pip(package_name)
         package_name = [k for k in package.keys()][0]
-
         # Add the package to the group.
         p[key][package_name] = package[package_name]
-
         # Write Pipfile.
         self.write_toml(p)
 
     def add_index_to_pipfile(self, index):
         """Adds a given index to the Pipfile."""
-
         # Read and append Pipfile.
         p = self._pipfile
-
         source = {'url': index, 'verify_ssl': True}
-
         # Add the package to the group.
         if 'source' not in p:
             p['source'] = [source]
-
         else:
             p['source'].append(source)
-
         # Write Pipfile.
         self.write_toml(p)
 
     def recase_pipfile(self):
         self.write_toml(recase_file(self._pipfile))
+
+    def get_lockfile_hash(self):
+        if not os.path.exists(self.lockfile_location):
+            return
+        # Open the lockfile.
+        with codecs.open(self.lockfile_location, 'r') as f:
+            lockfile = json.load(f)
+        return lockfile['_meta'].get('hash', {}).get('sha256')
+
+    def calculate_pipfile_hash(self):
+        # Update the lockfile if it is out-of-date.
+        p = pipfile.load(self.pipfile_location, inject_env=False)
+        return p.hash
